@@ -18,7 +18,8 @@ function Debugger (options) {
 
   this.debugger = new Ethdebugger({
     web3: options.web3,
-    compilationResult: this.compilationResult
+    debugWithGeneratedSources: options.debugWithGeneratedSources,
+    compilationResult: this.compilationResult,
   })
 
   this.breakPointManager = new BreakpointManager(this.debugger, async (sourceLocation) => {
@@ -55,8 +56,17 @@ Debugger.prototype.registerAndHighlightCodeItem = async function (index) {
 
     this.debugger.callTree.sourceLocationTracker.getSourceLocationFromVMTraceIndex(address, index, compilationResultForAddress.data.contracts).then((rawLocation) => {
       if (compilationResultForAddress && compilationResultForAddress.data) {
-        var lineColumnPos = this.offsetToLineColumnConverter.offsetToLineColumn(rawLocation, rawLocation.file, compilationResultForAddress.source.sources, compilationResultForAddress.data.sources)
-        this.event.trigger('newSourceLocation', [lineColumnPos, rawLocation])
+        const generatedSources = this.debugger.callTree.sourceLocationTracker.getGeneratedSourcesFromAddress(address)
+        const astSources = Object.assign({}, compilationResultForAddress.data.sources)
+        const sources = Object.assign({}, compilationResultForAddress.source.sources)
+        if (generatedSources) {
+          for (const genSource of generatedSources) {
+            astSources[genSource.name] = { id: genSource.id, ast: genSource.ast }
+            sources[genSource.name] = { content: genSource.contents }
+          }
+        }
+        var lineColumnPos = this.offsetToLineColumnConverter.offsetToLineColumn(rawLocation, rawLocation.file, sources, astSources)
+        this.event.trigger('newSourceLocation', [lineColumnPos, rawLocation, generatedSources])
       } else {
         this.event.trigger('newSourceLocation', [null])
       }
